@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Blurr Tool — Antonio Pérez</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+        integrity="sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf7xJE8YWIUHMn+oCQ=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+        integrity="sha512-qZvrmS2ekKPF2mSznTQsxqPgnpkI4DNTlrdUmTzrDgektczlKNRRhy5X5AAOnx5S09ydFYWWNSfcEqDTTHgtNA=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<style>
+  :root { --bg:#1a1a1a; --panel:#252525; --accent:#4a9eff; --text:#e8e8e8; --border:#3a3a3a; }
+  * { box-sizing: border-box; }
+  html, body { height:100%; }
+  body { margin:0; font-family: -apple-system, system-ui, sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; min-height:100vh; }
+  header { padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  h1 { margin:0; font-size:16px; font-weight:600; }
+  .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  button, label.btn { background:#333; color:var(--text); border:1px solid var(--border); padding:6px 12px; border-radius:6px; cursor:pointer; font-size:13px; }
+  button:hover, label.btn:hover { background:#404040; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.primary:hover { background:#3a8eef; }
+  button:disabled { opacity:0.4; cursor:not-allowed; }
+  button.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.lvl { padding:4px 10px; font-size:12px; }
+  input[type=file] { display:none; }
+  .field { display:flex; align-items:center; gap:6px; font-size:13px; }
+  input[type=range] { width:110px; }
+  input[type=number] { width:56px; background:#333; color:var(--text); border:1px solid var(--border); padding:4px; border-radius:4px; }
+  main { padding:20px; display:flex; justify-content:center; align-items:center; flex:1; min-height:0; overflow:auto; }
+  footer { padding:16px 20px; background:var(--panel); border-top:1px solid var(--border); text-align:center; font-size:13px; color:#aaa; display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; }
+  footer strong { color:var(--text); font-weight:600; }
+  footer a { color:var(--accent); text-decoration:none; }
+  footer a:hover { text-decoration:underline; }
+  footer .sep { color:#555; }
+  .canvas-wrap { position:relative; box-shadow:0 4px 20px rgba(0,0,0,0.5); line-height:0; flex-shrink:0; }
+  canvas { display:block; max-width:100%; max-height:calc(100vh - 160px); width:auto; height:auto; object-fit:contain; cursor:crosshair; }
+  .empty { padding:60px; text-align:center; color:#888; border:2px dashed var(--border); border-radius:8px; }
+  .hint { font-size:12px; color:#888; }
+  .status { font-size:12px; color:#888; margin-left:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Blurr Tool · by Antonio Pérez</h1>
+  <div class="toolbar">
+    <label class="btn">📁 Abrir imagen / PDF<input type="file" id="file" accept="image/*,application/pdf"></label>
+    <div id="pageNav" class="field" style="display:none;">
+      <button id="prevPage">◀</button>
+      <span id="pageInfo">1 / 1</span>
+      <button id="nextPage">▶</button>
+    </div>
+    <button id="modePixel" class="active">Pixelar</button>
+    <button id="modeBlur">Blur</button>
+    <div class="field">
+      <span>Intensidad:</span>
+      <button id="lvl1" class="lvl">Bajo</button>
+      <button id="lvl2" class="lvl active">Medio</button>
+      <button id="lvl3" class="lvl">Alto</button>
+    </div>
+    <button id="undo" disabled>↶ Deshacer</button>
+    <button id="clear" disabled>Limpiar todo</button>
+    <button id="download" class="primary" disabled>⬇ Descargar</button>
+  </div>
+  <div class="status hint">Todo el procesamiento es local. Nada sale de tu equipo.</div>
+</header>
+<main>
+  <div id="emptyState" class="empty">
+    Abre una imagen o PDF, arrástralo, o pega una imagen con ⌘V.<br>
+    <span class="hint">Luego dibuja rectángulos sobre las zonas sensibles.</span>
+  </div>
+  <div class="canvas-wrap" id="canvasWrap" style="display:none;">
+    <canvas id="canvas"></canvas>
+  </div>
+</main>
+<script>
+const fileInput = document.getElementById('file');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const wrap = document.getElementById('canvasWrap');
+const empty = document.getElementById('emptyState');
+const btnBlur = document.getElementById('modeBlur');
+const btnPixel = document.getElementById('modePixel');
+const lvlBtns = [document.getElementById('lvl1'), document.getElementById('lvl2'), document.getElementById('lvl3')];
+let level = 2;
+const PIXEL_SIZES = { 1: 6, 2: 14, 3: 28 };
+const BLUR_SIZES  = { 1: 3, 2: 8, 3: 20 };
+lvlBtns.forEach((b, i) => b.addEventListener('click', () => {
+  level = i + 1;
+  lvlBtns.forEach(x => x.classList.remove('active'));
+  b.classList.add('active');
+}));
+const btnUndo = document.getElementById('undo');
+const btnClear = document.getElementById('clear');
+const btnDl = document.getElementById('download');
+
+let img = null;
+let mode = 'pixel';
+let regions = [];
+let drawing = false;
+let startX = 0, startY = 0;
+let currentRect = null;
+let origFileName = 'imagen';
+let isPdf = false;
+let pdfPages = [];
+let currentPage = 0;
+
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+const prevPageBtn = document.getElementById('prevPage');
+const nextPageBtn = document.getElementById('nextPage');
+const pageInfo = document.getElementById('pageInfo');
+const pageNav = document.getElementById('pageNav');
+prevPageBtn.addEventListener('click', () => { if (currentPage > 0) { savePageRegions(); showPage(currentPage - 1); } });
+nextPageBtn.addEventListener('click', () => { if (currentPage < pdfPages.length - 1) { savePageRegions(); showPage(currentPage + 1); } });
+
+function savePageRegions() {
+  if (isPdf && pdfPages[currentPage]) pdfPages[currentPage].regions = regions;
+}
+function showPage(idx) {
+  currentPage = idx;
+  const p = pdfPages[idx];
+  img = p.source;
+  canvas.width = p.source.width;
+  canvas.height = p.source.height;
+  regions = p.regions || [];
+  redraw();
+  updatePageNav();
+  updateButtons();
+}
+function updatePageNav() {
+  if (isPdf) {
+    pageNav.style.display = 'flex';
+    pageInfo.textContent = `${currentPage + 1} / ${pdfPages.length}`;
+    prevPageBtn.disabled = currentPage === 0;
+    nextPageBtn.disabled = currentPage === pdfPages.length - 1;
+  } else {
+    pageNav.style.display = 'none';
+  }
+}
+
+btnBlur.addEventListener('click', () => { mode='blur'; btnBlur.classList.add('active'); btnPixel.classList.remove('active'); });
+btnPixel.addEventListener('click', () => { mode='pixel'; btnPixel.classList.add('active'); btnBlur.classList.remove('active'); });
+
+fileInput.addEventListener('change', e => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+
+function loadFile(file) {
+  if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+    loadPdf(file);
+  } else if (file.type.startsWith('image/')) {
+    loadImage(file);
+  }
+}
+
+async function loadPdf(file) {
+  if (!window.pdfjsLib) { alert('PDF.js no cargó. Comprueba tu conexión a internet.'); return; }
+  origFileName = file.name.replace(/\.[^.]+$/, '');
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  pdfPages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const c = document.createElement('canvas');
+    c.width = viewport.width;
+    c.height = viewport.height;
+    await page.render({ canvasContext: c.getContext('2d'), viewport }).promise;
+    pdfPages.push({ source: c, regions: [] });
+  }
+  isPdf = true;
+  currentPage = 0;
+  empty.style.display = 'none';
+  wrap.style.display = 'block';
+  showPage(0);
+}
+
+document.addEventListener('paste', e => {
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return;
+  for (const it of items) {
+    if (it.type && it.type.startsWith('image/')) {
+      const blob = it.getAsFile();
+      if (blob) {
+        e.preventDefault();
+        const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+        const named = new File([blob], `captura_${ts}.png`, { type: blob.type });
+        loadImage(named);
+        return;
+      }
+    }
+  }
+});
+
+function loadImage(file) {
+  origFileName = file.name.replace(/\.[^.]+$/, '');
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const im = new Image();
+    im.onload = () => {
+      img = im;
+      canvas.width = im.naturalWidth;
+      canvas.height = im.naturalHeight;
+      regions = [];
+      isPdf = false;
+      pdfPages = [];
+      currentPage = 0;
+      empty.style.display = 'none';
+      wrap.style.display = 'block';
+      redraw();
+      updatePageNav();
+      updateButtons();
+    };
+    im.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function canvasCoords(e) {
+  const r = canvas.getBoundingClientRect();
+  const sx = canvas.width / r.width;
+  const sy = canvas.height / r.height;
+  return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
+}
+
+canvas.addEventListener('mousedown', e => {
+  if (!img) return;
+  const p = canvasCoords(e);
+  drawing = true;
+  startX = p.x; startY = p.y;
+  const intensity = mode === 'blur' ? BLUR_SIZES[level] : PIXEL_SIZES[level];
+  currentRect = { x:startX, y:startY, w:0, h:0, type:mode, intensity };
+});
+canvas.addEventListener('mousemove', e => {
+  if (!drawing) return;
+  const p = canvasCoords(e);
+  currentRect.x = Math.min(startX, p.x);
+  currentRect.y = Math.min(startY, p.y);
+  currentRect.w = Math.abs(p.x - startX);
+  currentRect.h = Math.abs(p.y - startY);
+  redraw(currentRect);
+});
+canvas.addEventListener('mouseup', () => {
+  if (!drawing) return;
+  drawing = false;
+  if (currentRect.w > 3 && currentRect.h > 3) {
+    regions.push(currentRect);
+    updateButtons();
+  }
+  currentRect = null;
+  redraw();
+});
+canvas.addEventListener('mouseleave', () => { if (drawing) { drawing = false; currentRect = null; redraw(); } });
+
+function boxBlurPass(src, dst, w, h, r, horizontal) {
+  const div = 2 * r + 1;
+  if (horizontal) {
+    for (let y = 0; y < h; y++) {
+      let rs=0, gs=0, bs=0, as=0;
+      for (let k = -r; k <= r; k++) {
+        const nx = Math.min(w - 1, Math.max(0, k));
+        const i = (y * w + nx) * 4;
+        rs += src[i]; gs += src[i+1]; bs += src[i+2]; as += src[i+3];
+      }
+      for (let x = 0; x < w; x++) {
+        const o = (y * w + x) * 4;
+        dst[o] = rs / div; dst[o+1] = gs / div; dst[o+2] = bs / div; dst[o+3] = as / div;
+        const ox = Math.min(w - 1, Math.max(0, x - r));
+        const ix = Math.min(w - 1, Math.max(0, x + r + 1));
+        const oi = (y * w + ox) * 4;
+        const ii = (y * w + ix) * 4;
+        rs += src[ii] - src[oi];
+        gs += src[ii+1] - src[oi+1];
+        bs += src[ii+2] - src[oi+2];
+        as += src[ii+3] - src[oi+3];
+      }
+    }
+  } else {
+    for (let x = 0; x < w; x++) {
+      let rs=0, gs=0, bs=0, as=0;
+      for (let k = -r; k <= r; k++) {
+        const ny = Math.min(h - 1, Math.max(0, k));
+        const i = (ny * w + x) * 4;
+        rs += src[i]; gs += src[i+1]; bs += src[i+2]; as += src[i+3];
+      }
+      for (let y = 0; y < h; y++) {
+        const o = (y * w + x) * 4;
+        dst[o] = rs / div; dst[o+1] = gs / div; dst[o+2] = bs / div; dst[o+3] = as / div;
+        const oy = Math.min(h - 1, Math.max(0, y - r));
+        const iy = Math.min(h - 1, Math.max(0, y + r + 1));
+        const oi = (oy * w + x) * 4;
+        const ii = (iy * w + x) * 4;
+        rs += src[ii] - src[oi];
+        gs += src[ii+1] - src[oi+1];
+        bs += src[ii+2] - src[oi+2];
+        as += src[ii+3] - src[oi+3];
+      }
+    }
+  }
+}
+
+function applyBlur(region) {
+  const { x, y, w, h, intensity } = region;
+  const ix = Math.round(x), iy = Math.round(y);
+  const iw = Math.round(w), ih = Math.round(h);
+  if (iw < 1 || ih < 1) return;
+  const imgData = ctx.getImageData(ix, iy, iw, ih);
+  const src = imgData.data;
+  const dst = new Uint8ClampedArray(src.length);
+  const r = Math.max(1, intensity);
+  for (let pass = 0; pass < 3; pass++) {
+    boxBlurPass(src, dst, iw, ih, r, true);
+    boxBlurPass(dst, src, iw, ih, r, false);
+  }
+  ctx.putImageData(imgData, ix, iy);
+}
+
+function applyPixel(region) {
+  const { x, y, w, h, intensity } = region;
+  const blockSize = Math.max(2, intensity);
+  const tmp = document.createElement('canvas');
+  const sw = Math.max(1, Math.floor(w / blockSize));
+  const sh = Math.max(1, Math.floor(h / blockSize));
+  tmp.width = sw; tmp.height = sh;
+  const tctx = tmp.getContext('2d');
+  tctx.imageSmoothingEnabled = false;
+  tctx.drawImage(canvas, x, y, w, h, 0, 0, sw, sh);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(tmp, 0, 0, sw, sh, x, y, w, h);
+  ctx.imageSmoothingEnabled = true;
+}
+
+function redraw(preview) {
+  if (!img) return;
+  ctx.filter = 'none';
+  ctx.drawImage(img, 0, 0);
+  for (const r of regions) {
+    if (r.type === 'blur') applyBlur(r); else applyPixel(r);
+  }
+  if (preview && preview.w > 0 && preview.h > 0) {
+    ctx.save();
+    ctx.strokeStyle = '#4a9eff';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6,4]);
+    ctx.strokeRect(preview.x, preview.y, preview.w, preview.h);
+    ctx.restore();
+  }
+}
+
+function undo() { if (regions.length) { regions.pop(); redraw(); updateButtons(); } }
+btnUndo.addEventListener('click', undo);
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+  }
+});
+btnClear.addEventListener('click', () => { regions = []; redraw(); updateButtons(); });
+btnDl.addEventListener('click', async () => {
+  if (isPdf) {
+    savePageRegions();
+    const { jsPDF } = window.jspdf;
+    const first = pdfPages[0].source;
+    const orient = first.width > first.height ? 'l' : 'p';
+    const doc = new jsPDF({ orientation: orient, unit: 'pt', format: [first.width, first.height] });
+    const savedPage = currentPage;
+    for (let i = 0; i < pdfPages.length; i++) {
+      showPage(i);
+      if (i > 0) {
+        const o = pdfPages[i].source.width > pdfPages[i].source.height ? 'l' : 'p';
+        doc.addPage([pdfPages[i].source.width, pdfPages[i].source.height], o);
+      }
+      doc.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfPages[i].source.width, pdfPages[i].source.height);
+    }
+    doc.save(origFileName + '_blurred.pdf');
+    showPage(savedPage);
+  } else {
+    const link = document.createElement('a');
+    link.download = origFileName + '_blurred.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }
+});
+
+function updateButtons() {
+  const has = regions.length > 0;
+  btnUndo.disabled = !has;
+  btnClear.disabled = !has;
+  btnDl.disabled = !img;
+}
+</script>
+<footer>
+  <span>Hecho por <strong>Antonio Luis Pérez Carmona</strong> · Data Analyst</span>
+  <span class="sep">|</span>
+  <a href="https://www.linkedin.com/in/antonio-luis-perez-carmona" target="_blank" rel="noopener">LinkedIn ↗</a>
+  <span class="sep">|</span>
+  <span class="hint">Turning complexity into clarity</span>
+</footer>
+</body>
+</html>

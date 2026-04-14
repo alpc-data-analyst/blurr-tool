@@ -28,7 +28,7 @@
   .field { display:flex; align-items:center; gap:6px; font-size:13px; }
   input[type=range] { width:110px; }
   input[type=number] { width:56px; background:#333; color:var(--text); border:1px solid var(--border); padding:4px; border-radius:4px; }
-  main { padding:20px; display:flex; justify-content:center; align-items:center; flex:1; min-height:0; overflow:auto; }
+  main { padding:20px; display:flex; justify-content:safe center; align-items:safe center; flex:1; min-height:0; overflow:auto; }
   footer { padding:16px 20px; background:var(--panel); border-top:1px solid var(--border); text-align:center; font-size:13px; color:#aaa; display:flex; align-items:center; justify-content:center; gap:10px; flex-wrap:wrap; }
   footer strong { color:var(--text); font-weight:600; }
   footer a { color:var(--accent); text-decoration:none; }
@@ -275,16 +275,18 @@ canvas.addEventListener('mousedown', e => {
   const intensity = mode === 'blur' ? BLUR_SIZES[level] : PIXEL_SIZES[level];
   currentRect = { x:startX, y:startY, w:0, h:0, type:mode, intensity };
 });
-canvas.addEventListener('mousemove', e => {
+document.addEventListener('mousemove', e => {
   if (!drawing) return;
   const p = canvasCoords(e);
-  currentRect.x = Math.min(startX, p.x);
-  currentRect.y = Math.min(startY, p.y);
-  currentRect.w = Math.abs(p.x - startX);
-  currentRect.h = Math.abs(p.y - startY);
+  const px = Math.max(0, Math.min(canvas.width, p.x));
+  const py = Math.max(0, Math.min(canvas.height, p.y));
+  currentRect.x = Math.min(startX, px);
+  currentRect.y = Math.min(startY, py);
+  currentRect.w = Math.abs(px - startX);
+  currentRect.h = Math.abs(py - startY);
   redraw(currentRect);
 });
-canvas.addEventListener('mouseup', () => {
+document.addEventListener('mouseup', () => {
   if (!drawing) return;
   drawing = false;
   if (currentRect.w > 3 && currentRect.h > 3) {
@@ -294,7 +296,6 @@ canvas.addEventListener('mouseup', () => {
   currentRect = null;
   redraw();
 });
-canvas.addEventListener('mouseleave', () => { if (drawing) { drawing = false; currentRect = null; redraw(); } });
 
 function boxBlurPass(src, dst, w, h, r, horizontal) {
   const div = 2 * r + 1;

@@ -14,7 +14,8 @@
   * { box-sizing: border-box; }
   html, body { height:100%; }
   body { margin:0; font-family: -apple-system, system-ui, sans-serif; background:var(--bg); color:var(--text); display:flex; flex-direction:column; min-height:100vh; }
-  header { padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+  header { padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border); display:flex; flex-direction:column; gap:10px; }
+  .top-row { display:flex; align-items:center; gap:16px; }
   h1 { margin:0; font-size:16px; font-weight:600; }
   .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
   button, label.btn { background:#333; color:var(--text); border:1px solid var(--border); padding:6px 12px; border-radius:6px; cursor:pointer; font-size:13px; }
@@ -43,7 +44,10 @@
 </head>
 <body>
 <header>
-  <h1>Blurr Tool</h1>
+  <div class="top-row">
+    <h1>Blurr Tool</h1>
+    <div class="status hint">Todo el procesamiento es local. Nada sale de tu equipo.</div>
+  </div>
   <div class="toolbar">
     <label class="btn">📁 Abrir imagen / PDF<input type="file" id="file" accept="image/*,application/pdf"></label>
     <div id="pageNav" class="field" style="display:none;">
@@ -68,7 +72,6 @@
     <button id="clear" disabled>Limpiar todo</button>
     <button id="download" class="primary" disabled>⬇ Descargar</button>
   </div>
-  <div class="status hint">Todo el procesamiento es local. Nada sale de tu equipo.</div>
 </header>
 <main>
   <div id="emptyState" class="empty">

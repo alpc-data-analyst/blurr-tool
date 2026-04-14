@@ -59,6 +59,11 @@
       <button id="lvl2" class="lvl active">Medio</button>
       <button id="lvl3" class="lvl">Alto</button>
     </div>
+    <div class="field">
+      <button id="zoomOut" title="Alejar">🔍−</button>
+      <button id="zoomReset" title="Restablecer">100%</button>
+      <button id="zoomIn" title="Acercar">🔍+</button>
+    </div>
     <button id="undo" disabled>↶ Deshacer</button>
     <button id="clear" disabled>Limpiar todo</button>
     <button id="download" class="primary" disabled>⬇ Descargar</button>
@@ -94,6 +99,34 @@ lvlBtns.forEach((b, i) => b.addEventListener('click', () => {
 const btnUndo = document.getElementById('undo');
 const btnClear = document.getElementById('clear');
 const btnDl = document.getElementById('download');
+const btnZoomIn = document.getElementById('zoomIn');
+const btnZoomOut = document.getElementById('zoomOut');
+const btnZoomReset = document.getElementById('zoomReset');
+const mainEl = document.querySelector('main');
+let zoom = 1;
+
+function computeFitSize() {
+  if (!canvas.width || !canvas.height) return { w: 0, h: 0 };
+  const maxW = Math.max(100, mainEl.clientWidth - 40);
+  const maxH = Math.max(100, mainEl.clientHeight - 40);
+  const ratio = canvas.width / canvas.height;
+  let w = maxW, h = w / ratio;
+  if (h > maxH) { h = maxH; w = h * ratio; }
+  return { w, h };
+}
+function applyZoom() {
+  if (!img) return;
+  const fit = computeFitSize();
+  canvas.style.maxWidth = 'none';
+  canvas.style.maxHeight = 'none';
+  canvas.style.width = (fit.w * zoom) + 'px';
+  canvas.style.height = (fit.h * zoom) + 'px';
+  btnZoomReset.textContent = Math.round(zoom * 100) + '%';
+}
+btnZoomIn.addEventListener('click', () => { zoom = Math.min(5, zoom * 1.25); applyZoom(); });
+btnZoomOut.addEventListener('click', () => { zoom = Math.max(0.25, zoom / 1.25); applyZoom(); });
+btnZoomReset.addEventListener('click', () => { zoom = 1; applyZoom(); });
+window.addEventListener('resize', () => { if (img) applyZoom(); });
 
 let img = null;
 let mode = 'pixel';
@@ -128,6 +161,7 @@ function showPage(idx) {
   canvas.height = p.source.height;
   regions = p.regions || [];
   redraw();
+  applyZoom();
   updatePageNav();
   updateButtons();
 }
@@ -217,6 +251,7 @@ function loadImage(file) {
       empty.style.display = 'none';
       wrap.style.display = 'block';
       redraw();
+      applyZoom();
       updatePageNav();
       updateButtons();
     };

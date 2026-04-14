@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Blurr Tool — Antonio Pérez</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
         integrity="sha512-q+4liFwdPC/bNdhUpZx6aXDx/h77yEQtn4I1slHydcbZK34nLaR3cAeYSJshoxIOq3mjEf7xJE8YWIUHMn+oCQ=="
         crossorigin="anonymous" referrerpolicy="no-referrer"></script>
@@ -36,7 +37,20 @@
   footer a:hover { text-decoration:underline; }
   footer .sep { color:#555; }
   .canvas-wrap { position:relative; box-shadow:0 4px 20px rgba(0,0,0,0.5); line-height:0; flex-shrink:0; }
-  canvas { display:block; max-width:100%; max-height:calc(100vh - 160px); width:auto; height:auto; object-fit:contain; cursor:crosshair; }
+  canvas { display:block; max-width:100%; max-height:calc(100vh - 160px); width:auto; height:auto; object-fit:contain; cursor:crosshair; touch-action:none; -webkit-user-select:none; user-select:none; }
+  @media (max-width: 700px) {
+    header { padding:10px 12px; gap:8px; }
+    h1 { font-size:15px; }
+    .top-row { flex-wrap:wrap; }
+    .status { font-size:11px; flex-basis:100%; margin-left:0; text-align:left; }
+    .toolbar { gap:6px; }
+    button, label.btn { padding:8px 10px; font-size:12px; }
+    button.lvl { padding:6px 8px; }
+    .field span { font-size:11px; }
+    main { padding:10px; }
+    footer { font-size:11px; padding:12px 10px; gap:6px; }
+    .empty { padding:30px 15px; font-size:14px; }
+  }
   .empty { padding:60px; text-align:center; color:#888; border:2px dashed var(--border); border-radius:8px; }
   .hint { font-size:12px; color:#888; }
   .status { font-size:12px; color:var(--accent); font-weight:500; margin-left:auto; }
@@ -270,16 +284,21 @@ function canvasCoords(e) {
   return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
 }
 
-canvas.addEventListener('mousedown', e => {
+let activePointer = null;
+canvas.addEventListener('pointerdown', e => {
   if (!img) return;
+  e.preventDefault();
+  activePointer = e.pointerId;
+  canvas.setPointerCapture(e.pointerId);
   const p = canvasCoords(e);
   drawing = true;
   startX = p.x; startY = p.y;
   const intensity = mode === 'blur' ? BLUR_SIZES[level] : PIXEL_SIZES[level];
   currentRect = { x:startX, y:startY, w:0, h:0, type:mode, intensity };
 });
-document.addEventListener('mousemove', e => {
-  if (!drawing) return;
+canvas.addEventListener('pointermove', e => {
+  if (!drawing || e.pointerId !== activePointer) return;
+  e.preventDefault();
   const p = canvasCoords(e);
   const px = Math.max(0, Math.min(canvas.width, p.x));
   const py = Math.max(0, Math.min(canvas.height, p.y));
@@ -289,16 +308,19 @@ document.addEventListener('mousemove', e => {
   currentRect.h = Math.abs(py - startY);
   redraw(currentRect);
 });
-document.addEventListener('mouseup', () => {
-  if (!drawing) return;
+function endPointer(e) {
+  if (!drawing || (e && e.pointerId !== activePointer)) return;
   drawing = false;
-  if (currentRect.w > 3 && currentRect.h > 3) {
+  activePointer = null;
+  if (currentRect && currentRect.w > 3 && currentRect.h > 3) {
     regions.push(currentRect);
     updateButtons();
   }
   currentRect = null;
   redraw();
-});
+}
+canvas.addEventListener('pointerup', endPointer);
+canvas.addEventListener('pointercancel', endPointer);
 
 function boxBlurPass(src, dst, w, h, r, horizontal) {
   const div = 2 * r + 1;

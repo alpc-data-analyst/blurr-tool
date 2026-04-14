@@ -38,12 +38,12 @@
   canvas { display:block; max-width:100%; max-height:calc(100vh - 160px); width:auto; height:auto; object-fit:contain; cursor:crosshair; }
   .empty { padding:60px; text-align:center; color:#888; border:2px dashed var(--border); border-radius:8px; }
   .hint { font-size:12px; color:#888; }
-  .status { font-size:12px; color:#888; margin-left:auto; }
+  .status { font-size:12px; color:var(--accent); font-weight:500; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Blurr Tool · by Antonio Pérez</h1>
+  <h1>Blurr Tool</h1>
   <div class="toolbar">
     <label class="btn">📁 Abrir imagen / PDF<input type="file" id="file" accept="image/*,application/pdf"></label>
     <div id="pageNav" class="field" style="display:none;">
